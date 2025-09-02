@@ -20,6 +20,25 @@ go build ./cmd/codex
 # mcp ping (type a line then Enter)
 printf '{"method":"ping"}\n' | ./codex mcp serve
 
+# mcp echo
+printf '{"method":"echo","text":"hi"}\n' | ./codex mcp serve
+
 # run (stream stdout/stderr and exit)
 ./codex run -- echo hello
+
+## Minimal protocol (phase 1)
+Submission (user_input):
+```
+{"id":"sub-1","op":{"type":"user_input","items":[{"type":"text","text":"Hello"}]}}
+```
+Submission (interrupt):
+```
+{"id":"sub-2","op":{"type":"interrupt"}}
+```
+Events sequence:
+```
+{"id":"sub-1","msg":{"type":"task_started"}}
+{"id":"sub-1","msg":{"type":"agent_message","text":"Hi there"}}
+{"id":"sub-1","msg":{"type":"task_complete"}}
+```
 ```

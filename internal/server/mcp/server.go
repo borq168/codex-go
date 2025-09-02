@@ -13,6 +13,8 @@ import (
 // we start with a tiny method switch that keeps I/O simple and observable.
 type request struct {
     Method string `json:"method"`
+    // Optional text payload for echo requests.
+    Text   string `json:"text,omitempty"`
 }
 
 // pong is the success payload we return when Method=="ping".
@@ -49,6 +51,23 @@ func Serve(ctx context.Context, r io.Reader, w io.Writer) error {
         case "ping":
             // Happy path: reply with pong.
             b, _ := json.Marshal(pong{Result: "pong"})
+            if _, err := w.Write(append(b, '\n')); err != nil {
+                return err
+            }
+        case "echo":
+            // Minimal echo route: return an agent_message with the provided text.
+            // Shape mirrors a tiny slice of our EventMsg for learning purposes.
+            type agentMsg struct {
+                Type string `json:"type"`
+                Text string `json:"text,omitempty"`
+            }
+            if req.Text == "" {
+                if _, err := fmt.Fprintln(w, `{"error":"missing text"}`); err != nil {
+                    return err
+                }
+                continue
+            }
+            b, _ := json.Marshal(agentMsg{Type: "agent_message", Text: req.Text})
             if _, err := w.Write(append(b, '\n')); err != nil {
                 return err
             }

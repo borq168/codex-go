@@ -1,105 +1,68 @@
 package protocol
 
-// This package defines the core protocol types that mirror the Rust
-// codex-rs "protocol" crate at a high level. The design follows a
-// Submission Queue (SQ) / Event Queue (EQ) model:
-//
-// - UI sends Submissions (Op) to the agent.
-// - Agent responds with Events (EventMsg) back to the UI.
-//
-// We intentionally keep the initial set minimal and human-readable to support
-// incremental learning. Over time this can be extended to more variants.
+// Minimal protocol v1 core for a first learning iteration.
+// SQ/EQ 模型（最小实现）：
+// - UI -> Agent: Submission { id, op }
+// - Agent -> UI: Event { id, msg }
+// - Op/EventMsg 使用 "type" 作为判别字段；仅保留最少必要的几类。
 
-// Submission represents a single request from the UI to the agent.
-// The UI provides a unique id to correlate follow-up Events.
+// Submission: UI 发送给 Agent 的一条请求。id 用于回溯匹配后续 Event。
 type Submission struct {
     ID string `json:"id"`
     Op Op    `json:"op"`
 }
 
-// Op is a tagged union of possible submission payloads.
-// We encode it as a struct with a Type discriminator for simplicity.
-// This mirrors serde's #[serde(tag = "type")] approach in Rust.
+// Op: 提交的具体操作（最小子集）。
+// - "user_input": items=[{type:"text", text:"..."}, ...]
+// - "interrupt": 无额外字段
 type Op struct {
-    Type string `json:"type"`
-
-    // user_input fields
-    Items []InputItem `json:"items,omitempty"`
-
-    // exec_approval fields
-    ApprovalID string         `json:"id,omitempty"`
-    Decision   ReviewDecision `json:"decision,omitempty"`
+    Type  string      `json:"type"`           // "user_input" | "interrupt"
+    Items []InputItem `json:"items,omitempty"` // 仅当 type=="user_input" 时使用
 }
 
-// Well-known Op.Type values (subset).
 const (
-    OpInterrupt   = "interrupt"
-    OpUserInput   = "user_input"
-    OpExecApproval = "exec_approval"
+    OpUserInput = "user_input"
+    OpInterrupt = "interrupt"
 )
 
-// InputItem is a user-provided content item. We support a minimal set
-// for now (text and image by URL, or a local file path to be converted later).
+// InputItem: 用户输入项（最小实现只支持文本）。
 type InputItem struct {
-    Type string `json:"type"` // "text" | "image" | "local_image"
-
-    // Text content when Type=="text".
-    Text string `json:"text,omitempty"`
-
-    // ImageURL when Type=="image" (data: URI or remote URL).
-    ImageURL string `json:"image_url,omitempty"`
-
-    // Local file path when Type=="local_image".
-    Path string `json:"path,omitempty"`
+    Type string `json:"type"`           // 固定为 "text"
+    Text string `json:"text,omitempty"` // 文本内容
 }
 
-// Event represents a single message from the agent back to the UI that
-// correlates to a Submission ID.
+// Event: Agent 发送给 UI 的响应消息。id 与 Submission.id 对应。
 type Event struct {
-    ID  string  `json:"id"`
+    ID  string   `json:"id"`
     Msg EventMsg `json:"msg"`
 }
 
-// EventMsg is a tagged union for agent->UI messages. We start with a compact
-// subset that is enough to demonstrate task lifecycle and messaging.
+// EventMsg: Agent -> UI 的事件（最小子集）。
+// - "task_started": 开始处理一次用户输入
+// - "agent_message": Agent 的文本输出（一次或多次）
+// - "task_complete": 本次处理完成
+// - "error": 出错信息
 type EventMsg struct {
-    Type string `json:"type"` // e.g., "error", "task_started", "task_complete", "agent_message", "exec_approval_request"
+    Type string `json:"type"` // "task_started" | "agent_message" | "task_complete" | "error"
 
-    // error
-    ErrorMessage string `json:"message,omitempty"`
-
-    // task_started
-    ModelContextWindow *uint64 `json:"model_context_window,omitempty"`
-
-    // task_complete
-    LastAgentMessage string `json:"last_agent_message,omitempty"`
-
-    // agent_message
-    AgentText string `json:"text,omitempty"`
-
-    // exec_approval_request
-    CallID string   `json:"call_id,omitempty"`
-    Command []string `json:"command,omitempty"`
-    Cwd     string   `json:"cwd,omitempty"`
-    Reason  string   `json:"reason,omitempty"`
+    // agent_message / error
+    Text    string `json:"text,omitempty"`    // agent_message 文本
+    Message string `json:"message,omitempty"` // error 文本
 }
 
-// Well-known EventMsg.Type values (subset).
 const (
-    EventError               = "error"
-    EventTaskStarted         = "task_started"
-    EventTaskComplete        = "task_complete"
-    EventAgentMessage        = "agent_message"
-    EventExecApprovalRequest = "exec_approval_request"
+    EventTaskStarted  = "task_started"
+    EventAgentMessage = "agent_message"
+    EventTaskComplete = "task_complete"
+    EventError        = "error"
 )
 
-// ReviewDecision mirrors a small subset of the Rust enum used when the user
-// approves or denies an execution request.
-type ReviewDecision string
-
-const (
-    DecisionApproved           ReviewDecision = "approved"
-    DecisionApprovedForSession ReviewDecision = "approved_for_session"
-    DecisionDenied             ReviewDecision = "denied"
-    DecisionAbort              ReviewDecision = "abort"
-)
+// 示例 JSON（最小）：
+// Submission (user_input):
+// {"id":"sub-1","op":{"type":"user_input","items":[{"type":"text","text":"Hello"}]}}
+// Submission (interrupt):
+// {"id":"sub-2","op":{"type":"interrupt"}}
+// Event 序列:
+// {"id":"sub-1","msg":{"type":"task_started"}}
+// {"id":"sub-1","msg":{"type":"agent_message","text":"Hi there"}}
+// {"id":"sub-1","msg":{"type":"task_complete"}}

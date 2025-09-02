@@ -13,6 +13,7 @@ import (
 	// Internal packages for the learning scaffold. We keep them under
 	// internal/ so the API surface can evolve freely without breaking users.
 	iexec "codex-go/internal/exec"
+	"codex-go/internal/agent"
 	"codex-go/internal/server/mcp"
 	"codex-go/internal/version"
 )
@@ -23,6 +24,7 @@ func usage() {
 	fmt.Println("Usage:")
 	fmt.Println("  codex [flags] version")
 	fmt.Println("  codex [flags] mcp serve")
+	fmt.Println("  codex [flags] serve   # protocol v1 minimal loop (phase 1)")
 	fmt.Println("  codex [flags] run -- <cmd...>")
 	fmt.Println("")
 	fmt.Println("Flags:")
@@ -142,6 +144,20 @@ func main() {
 		}
 		fmt.Println("usage: codex mcp serve")
 		os.Exit(2)
+	case "serve":
+		// Headless protocol v1 minimal loop (Phase 1):
+		// Reads newline-delimited Submissions from stdin and writes Events to stdout.
+		ctx := context.Background()
+		if globalFlags.timeout > 0 {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, globalFlags.timeout)
+			defer cancel()
+		}
+		if err := agent.Serve(ctx, os.Stdin, os.Stdout); err != nil {
+			fmt.Fprintf(os.Stderr, "serve error: %v\n", err)
+			os.Exit(1)
+		}
+		return
 	case "run":
 		// Minimal event-streaming runner: codex run -- <cmd...>
 		// Example: codex run -- echo hello
